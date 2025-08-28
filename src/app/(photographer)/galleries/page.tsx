@@ -62,7 +62,7 @@ export default function GalleriesPage() {
             additional_photo_price,
             expires_at,
             created_at,
-            clients!inner(name, email)
+            clients(name, email)
           `)
           .eq('photographer_id', session.user.id)
           .order('created_at', { ascending: false })
@@ -85,6 +85,7 @@ export default function GalleriesPage() {
 
             return {
               ...gallery,
+              clients: Array.isArray(gallery.clients) ? gallery.clients[0] || null : gallery.clients,
               _count: {
                 photos: photosCount.count || 0,
                 selections: selectionsCount.count || 0
