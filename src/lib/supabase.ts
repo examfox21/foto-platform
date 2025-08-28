@@ -1,17 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Database } from '@/types/database'
- 
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Client-side Supabase client
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+// Client-side Supabase client (bez generics - obejście problemu TypeScript)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Service role client (for admin operations)
 export const createServiceSupabase = () => {
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
   
-  return createClient<Database>(supabaseUrl, supabaseServiceKey, {
+  return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false
