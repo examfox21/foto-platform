@@ -6,7 +6,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { 
   Camera, 
   LayoutDashboard, 
-  Images, 
+  Image, 
   Users, 
   Settings, 
   LogOut,
@@ -18,7 +18,7 @@ import { supabase } from '@/lib/supabase'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Galerie', href: '/galleries', icon: Images },
+  { name: 'Galerie', href: '/galleries', icon: Image },
   { name: 'Klienci', href: '/clients', icon: Users },
   { name: 'Ustawienia', href: '/settings', icon: Settings },
 ]
