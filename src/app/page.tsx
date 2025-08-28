@@ -1,205 +1,318 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Camera, Smartphone, Users, CreditCard, Shield, Zap } from 'lucide-react'
+import { 
+  Plus, 
+  Eye, 
+  ShoppingCart, 
+  TrendingUp, 
+  Users,
+  Image,
+  Calendar,
+  DollarSign
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { supabase } from '@/lib/supabase'
+import { formatCurrency, formatDate } from '@/lib/utils'
 
-export default function HomePage() {
+interface DashboardStats {
+  totalGalleries: number
+  activeGalleries: number
+  totalClients: number
+  totalOrders: number
+  totalRevenue: number
+  pendingSelections: number
+}
+
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [recentGalleries, setRecentGalleries] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) return
+
+        setUser(session.user)
+
+        // Load stats
+        const [
+          galleriesResult,
+          clientsResult,
+          ordersResult,
+          recentGalleriesResult
+        ] = await Promise.all([
+          supabase
+            .from('galleries')
+            .select('status')
+            .eq('photographer_id', session.user.id),
+          
+          supabase
+            .from('clients')
+            .select('id')
+            .eq('photographer_id', session.user.id),
+          
+          supabase
+            .from('orders')
+            .select('total_amount, status')
+            .eq('photographer_id', session.user.id),
+            
+          supabase
+            .from('galleries')
+            .select(`
+              id,
+              title,
+              status,
+              created_at,
+              clients!inner(name, email)
+            `)
+            .eq('photographer_id', session.user.id)
+            .order('created_at', { ascending: false })
+            .limit(5)
+        ])
+
+        // Calculate stats
+        const galleries = galleriesResult.data || []
+        const clients = clientsResult.data || []
+        const orders = ordersResult.data || []
+
+        const dashboardStats: DashboardStats = {
+          totalGalleries: galleries.length,
+          activeGalleries: galleries.filter(g => g.status === 'active').length,
+          totalClients: clients.length,
+          totalOrders: orders.length,
+          totalRevenue: orders
+            .filter(o => o.status === 'paid')
+            .reduce((sum, o) => sum + Number(o.total_amount), 0),
+          pendingSelections: galleries.filter(g => g.status === 'active').length
+        }
+
+        setStats(dashboardStats)
+        setRecentGalleries(recentGalleriesResult.data || [])
+      } catch (error) {
+        console.error('Error loading dashboard data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadDashboardData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const statCards = [
+    {
+      title: 'Galerie',
+      value: stats?.totalGalleries || 0,
+      description: `${stats?.activeGalleries || 0} aktywnych`,
+      icon: Image,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100'
+    },
+    {
+      title: 'Klienci',
+      value: stats?.totalClients || 0,
+      description: 'Wszyscy klienci',
+      icon: Users,
+      color: 'text-green-600',
+      bgColor: 'bg-green-100'
+    },
+    {
+      title: 'Przychody',
+      value: formatCurrency(stats?.totalRevenue || 0),
+      description: `${stats?.totalOrders || 0} zamówień`,
+      icon: DollarSign,
+      color: 'text-yellow-600',
+      bgColor: 'bg-yellow-100'
+    },
+    {
+      title: 'Oczekujące',
+      value: stats?.pendingSelections || 0,
+      description: 'Wybory klientów',
+      icon: Eye,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100'
+    }
+  ]
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="p-6 space-y-6">
       {/* Header */}
-      <header className="border-b bg-white/95 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Camera className="h-8 w-8 text-indigo-600" />
-            <span className="text-2xl font-bold text-gray-900">FotoPlatform</span>
-          </div>
-          <nav className="hidden md:flex items-center space-x-8">
-            <Link href="#features" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">
-              Funkcje
-            </Link>
-            <Link href="#pricing" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">
-              Cennik
-            </Link>
-            <Link href="/login" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">
-              Logowanie
-            </Link>
-            <Link 
-              href="/register" 
-              className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-            >
-              Rozpocznij za darmo
-            </Link>
-          </nav>
-          <div className="md:hidden">
-            <Link 
-              href="/register" 
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-            >
-              Zarejestruj się
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      {/* Hero Section */}
-      <section className="py-20 md:py-32 bg-gradient-to-br from-indigo-50 via-white to-blue-50">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 mb-6 leading-tight">
-            Twoja fotografia, <span className="text-indigo-600">nasz sukces</span>
-          </h1>
-          <p className="text-lg sm:text-xl text-gray-600 mb-10 max-w-3xl mx-auto">
-            Zrewolucjonizuj swoją pracę dzięki platformie, która łączy zarządzanie klientami, sprzedaż zdjęć i intuicyjne galerie w jednym, mobilnym rozwiązaniu.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link 
-              href="/register"
-              className="bg-indigo-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-indigo-700 transition-all duration-300 shadow-lg w-full sm:w-auto"
-            >
-              Rozpocznij za darmo
-            </Link>
-            <Link 
-              href="#demo"
-              className="border-2 border-indigo-600 text-indigo-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-indigo-50 transition-all duration-300 w-full sm:w-auto"
-            >
-              Zobacz demo
-            </Link>
-          </div>
-          <p className="text-sm text-gray-500 mt-6">
-            Bezpłatny plan na zawsze • Bez ukrytych opłat • Rozwijaj biznes na swoich zasadach
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Witaj ponownie! Oto podsumowanie Twojej działalności.
           </p>
         </div>
-      </section>
-
-      {/* Features Section */}
-      <section id="features" className="py-20 md:py-32 bg-white">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-center text-gray-900 mb-16">
-            Narzędzia, które wspierają Twój sukces
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              {
-                icon: <Smartphone className="h-12 w-12 text-indigo-600 mx-auto mb-4" />,
-                title: "Zoptymalizowane dla urządzeń mobilnych",
-                description: "Intuicyjny interfejs zaprojektowany z myślą o smartfonach, zapewniający łatwy dostęp dla Ciebie i Twoich klientów."
-              },
-              {
-                icon: <Users className="h-12 w-12 text-indigo-600 mx-auto mb-4" />,
-                title: "Efektywne zarządzanie klientami",
-                description: "Centralizuj dane klientów, historię sesji i komunikację w jednym, uporządkowanym miejscu."
-              },
-              {
-                icon: <CreditCard className="h-12 w-12 text-indigo-600 mx-auto mb-4" />,
-                title: "Wygodne płatności online",
-                description: "Integracja z Przelewy24 umożliwia błyskawiczne i bezpieczne transakcje BLIK oraz przelewami."
-              },
-              {
-                icon: <Shield className="h-12 w-12 text-indigo-600 mx-auto mb-4" />,
-                title: "Zaawansowane zabezpieczenia",
-                description: "Twoje zdjęcia chronione są znakami wodnymi i szyfrowanym przechowywaniem w chmurze."
-              },
-              {
-                icon: <Zap className="h-12 w-12 text-indigo-600 mx-auto mb-4" />,
-                title: "Błyskawiczne ładowanie galerii",
-                description: "Optymalizacja obrazów i globalna sieć CDN zapewniają szybkie wczytywanie zdjęć."
-              },
-              {
-                icon: <Camera className="h-12 w-12 text-indigo-600 mx-auto mb-4" />,
-                title: "Intuicyjny upload zdjęć",
-                description: "Przeciągnij i upuść zdjęcia, z automatyczną kompresją i generowaniem miniatur."
-              }
-            ].map((feature, index) => (
-              <div key={index} className="text-center p-6 bg-gray-50 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300">
-                {feature.icon}
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">{feature.title}</h3>
-                <p className="text-gray-600">{feature.description}</p>
-              </div>
-            ))}
-          </div>
+        <div className="mt-4 sm:mt-0">
+          <Button asChild>
+            <Link href="/galleries/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nowa galeria
+            </Link>
+          </Button>
         </div>
-      </section>
+      </div>
 
-      {/* Testimonials Section */}
-      <section className="py-20 bg-gray-100">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl sm:text-4xl font-bold text-center text-gray-900 mb-16">
-            Co mówią nasi użytkownicy
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              {
-                quote: "FotoPlatform pozwoliła mi zaoszczędzić godziny na zarządzaniu klientami i zdjęciami. Polecam każdemu fotografowi!",
-                author: "Anna Kowalska, Fotograf Ślubny"
-              },
-              {
-                quote: "Integracja z płatnościami i mobilny interfejs to game-changer. Moi klienci uwielbiają prostotę!",
-                author: "Piotr Nowak, Fotograf Portretowy"
-              },
-              {
-                quote: "Szybkość ładowania galerii i zabezpieczenia zdjęć dały mi spokój ducha. Świetne narzędzie!",
-                author: "Katarzyna Zielińska, Fotograf Krajobrazowy"
-              }
-            ].map((testimonial, index) => (
-              <div key={index} className="bg-white p-6 rounded-lg shadow-sm">
-                <p className="text-gray-600 mb-4 italic">"{testimonial.quote}"</p>
-                <p className="text-indigo-600 font-semibold">{testimonial.author}</p>
-              </div>
-            ))}
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {statCards.map((card) => {
+          const Icon = card.icon
+          return (
+            <Card key={card.title}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">
+                      {card.title}
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {card.value}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {card.description}
+                    </p>
+                  </div>
+                  <div className={`p-3 rounded-full ${card.bgColor}`}>
+                    <Icon className={`h-6 w-6 ${card.color}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* Recent Galleries */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Ostatnie galerie</CardTitle>
+              <CardDescription>
+                Twoje najnowsze galerie fotograficzne
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/galleries">
+                Zobacz wszystkie
+              </Link>
+            </Button>
           </div>
-        </div>
-      </section>
+        </CardHeader>
+        <CardContent>
+          {recentGalleries.length > 0 ? (
+            <div className="space-y-4">
+              {recentGalleries.map((gallery) => (
+                <div key={gallery.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className="flex-1">
+                    <h3 className="font-medium text-gray-900">
+                      {gallery.title}
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Klient: {gallery.clients?.name || 'Brak danych'} • {formatDate(gallery.created_at)}
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <span className={`
+                      px-2 py-1 text-xs font-medium rounded-full
+                      ${gallery.status === 'active' 
+                        ? 'bg-green-100 text-green-800' 
+                        : gallery.status === 'draft'
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'bg-blue-100 text-blue-800'
+                      }
+                    `}>
+                      {gallery.status === 'active' ? 'Aktywna' : 
+                       gallery.status === 'draft' ? 'Szkic' : 'Zakończona'}
+                    </span>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={`/galleries/${gallery.id}`}>
+                        Zobacz
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Image className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-4 text-lg font-medium text-gray-900">
+                Brak galerii
+              </h3>
+              <p className="mt-2 text-gray-500">
+                Stwórz swoją pierwszą galerię fotograficzną
+              </p>
+              <Button className="mt-4" asChild>
+                <Link href="/galleries/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Stwórz galerię
+                </Link>
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* CTA Section */}
-      <section className="py-20 bg-indigo-600 text-white">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-6">
-            Przenieś swoją fotografię na wyższy poziom
-          </h2>
-          <p className="text-lg sm:text-xl mb-8 max-w-2xl mx-auto">
-            Dołącz do setek fotografów, którzy dzięki FotoPlatform zrewolucjonizowali swoje podejście do biznesu.
-          </p>
-          <Link 
-            href="/register"
-            className="bg-white text-indigo-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-gray-100 transition-all duration-300 shadow-lg inline-block"
-          >
-            Rozpocznij za darmo
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Link href="/galleries/new">
+            <CardContent className="p-6 text-center">
+              <Plus className="mx-auto h-8 w-8 text-primary" />
+              <h3 className="mt-4 text-lg font-medium">Nowa galeria</h3>
+              <p className="mt-2 text-sm text-gray-500">
+                Stwórz nową galerię dla klienta
+              </p>
+            </CardContent>
           </Link>
-        </div>
-      </section>
+        </Card>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-8">
-            <div>
-              <div className="flex items-center space-x-3 mb-4">
-                <Camera className="h-6 w-6" />
-                <span className="text-lg font-bold">FotoPlatform</span>
-              </div>
-              <p className="text-gray-400 text-sm">
-                Innowacyjne narzędzie dla fotografów, które łączy prostotę, funkcjonalność i nowoczesny design.
+        <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Link href="/clients/new">
+            <CardContent className="p-6 text-center">
+              <Users className="mx-auto h-8 w-8 text-primary" />
+              <h3 className="mt-4 text-lg font-medium">Nowy klient</h3>
+              <p className="mt-2 text-sm text-gray-500">
+                Dodaj nowego klienta do bazy
               </p>
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Linki</h3>
-              <ul className="space-y-2 text-gray-400 text-sm">
-                <li><Link href="#features" className="hover:text-white">Funkcje</Link></li>
-                <li><Link href="#pricing" className="hover:text-white">Cennik</Link></li>
-                <li><Link href="/login" className="hover:text-white">Logowanie</Link></li>
-                <li><Link href="/register" className="hover:text-white">Zarejestruj się</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Kontakt</h3>
-              <p className="text-gray-400 text-sm">
-                Email: <a href="mailto:support@fotoplatform.pl" className="hover:text-white">support@fotoplatform.pl</a><br />
-                Telefon: +48 123 456 789
+            </CardContent>
+          </Link>
+        </Card>
+
+        <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Link href="/settings">
+            <CardContent className="p-6 text-center">
+              <TrendingUp className="mx-auto h-8 w-8 text-primary" />
+              <h3 className="mt-4 text-lg font-medium">Ustawienia</h3>
+              <p className="mt-2 text-sm text-gray-500">
+                Skonfiguruj swoje konto
               </p>
-            </div>
-          </div>
-          <p className="text-center text-gray-400 text-sm mt-8">
-            © 2025 FotoPlatform. Wszystkie prawa zastrzeżone.
-          </p>
-        </div>
-      </footer>
+            </CardContent>
+          </Link>
+        </Card>
+      </div>
     </div>
   )
 }
