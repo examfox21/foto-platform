@@ -8,7 +8,7 @@ import {
   ShoppingCart, 
   TrendingUp, 
   Users,
-  Images,
+  Image,
   Calendar,
   DollarSign
 } from 'lucide-react'
@@ -124,7 +124,7 @@ export default function DashboardPage() {
       title: 'Galerie',
       value: stats?.totalGalleries || 0,
       description: `${stats?.activeGalleries || 0} aktywnych`,
-      icon: Images,
+      icon: Image,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100'
     },
@@ -257,7 +257,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="text-center py-8">
-              <Images className="mx-auto h-12 w-12 text-gray-400" />
+              <Image className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-4 text-lg font-medium text-gray-900">
                 Brak galerii
               </h3>
