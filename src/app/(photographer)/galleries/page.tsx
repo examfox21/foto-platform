@@ -32,7 +32,7 @@ interface Gallery {
   clients: {
     name: string
     email: string
-  }
+  } | null
   _count?: {
     photos: number
     selections: number
@@ -106,7 +106,8 @@ export default function GalleriesPage() {
 
   const filteredGalleries = galleries.filter(gallery =>
     gallery.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    gallery.clients?.name.toLowerCase().includes(searchTerm.toLowerCase())
+    gallery.clients?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    false
   )
 
   const getStatusColor = (status: string) => {
