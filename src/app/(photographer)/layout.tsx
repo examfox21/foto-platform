@@ -195,7 +195,7 @@ export default function PhotographerLayout({
         </div>
 
         {/* Page content */}
-        <main className="flex-1">
+        <main className="flex-1 min-h-screen">
           {children}
         </main>
       </div>
