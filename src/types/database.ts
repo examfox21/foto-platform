@@ -5,7 +5,7 @@ export type Json =
   | null
   | { [key: string]: Json | undefined }
   | Json[]
- 
+
 export interface Database {
   public: {
     Tables: {
@@ -17,9 +17,9 @@ export interface Database {
           business_name: string | null
           phone: string | null
           website: string | null
-          stripe_account_id: string | null
           subscription_status: string
           created_at: string
+          updated_at: string
         }
         Insert: {
           id: string
@@ -28,9 +28,9 @@ export interface Database {
           business_name?: string | null
           phone?: string | null
           website?: string | null
-          stripe_account_id?: string | null
           subscription_status?: string
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -39,9 +39,9 @@ export interface Database {
           business_name?: string | null
           phone?: string | null
           website?: string | null
-          stripe_account_id?: string | null
           subscription_status?: string
           created_at?: string
+          updated_at?: string
         }
       }
       clients: {
@@ -52,6 +52,7 @@ export interface Database {
           name: string
           phone: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -60,6 +61,7 @@ export interface Database {
           name: string
           phone?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -68,6 +70,7 @@ export interface Database {
           name?: string
           phone?: string | null
           created_at?: string
+          updated_at?: string
         }
       }
       galleries: {
@@ -83,6 +86,7 @@ export interface Database {
           additional_photo_price: number
           expires_at: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -96,6 +100,7 @@ export interface Database {
           additional_photo_price?: number
           expires_at?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -109,6 +114,7 @@ export interface Database {
           additional_photo_price?: number
           expires_at?: string | null
           created_at?: string
+          updated_at?: string
         }
       }
       photos: {
@@ -124,6 +130,7 @@ export interface Database {
           height: number | null
           upload_order: number | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -137,6 +144,7 @@ export interface Database {
           height?: number | null
           upload_order?: number | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -150,6 +158,7 @@ export interface Database {
           height?: number | null
           upload_order?: number | null
           created_at?: string
+          updated_at?: string
         }
       }
       client_selections: {
@@ -191,6 +200,7 @@ export interface Database {
           p24_session_id: string | null
           status: string
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
@@ -201,6 +211,7 @@ export interface Database {
           p24_session_id?: string | null
           status?: string
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
@@ -211,6 +222,7 @@ export interface Database {
           p24_session_id?: string | null
           status?: string
           created_at?: string
+          updated_at?: string
         }
       }
     }
@@ -221,6 +233,9 @@ export interface Database {
       [_ in never]: never
     }
     Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
       [_ in never]: never
     }
   }
