@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Camera, Smartphone, Users, CreditCard, Shield, Zap } from 'lucide-react'
-
+ 
 export default function HomePage() {
   return (
     <div className="min-h-screen">
