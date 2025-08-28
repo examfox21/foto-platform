@@ -1,19 +1,14 @@
-import { createClientComponentClient, createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
 import type { Database } from '@/types/database'
 
-// Client-side Supabase client
-export const createClientSupabase = () =>
-  createClientComponentClient<Database>()
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Server-side Supabase client
-export const createServerSupabase = () =>
-  createServerComponentClient<Database>({ cookies })
+// Client-side Supabase client
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
 
 // Service role client (for admin operations)
 export const createServiceSupabase = () => {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
   
   return createClient<Database>(supabaseUrl, supabaseServiceKey, {
@@ -23,9 +18,6 @@ export const createServiceSupabase = () => {
     }
   })
 }
-
-// Default export for client use
-export const supabase = createClientSupabase()
 
 // Storage helpers
 export const uploadPhoto = async (file: File, bucket: string, path: string) => {
