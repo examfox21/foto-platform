@@ -178,7 +178,7 @@ export default function PhotographerLayout({
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 min-h-screen">
         {/* Mobile header */}
         <div className="lg:hidden flex items-center justify-between h-16 px-4 bg-white border-b">
           <button
@@ -195,7 +195,7 @@ export default function PhotographerLayout({
         </div>
 
         {/* Page content */}
-        <main className="flex-1 min-h-screen">
+        <main className="min-h-screen bg-gray-50">
           {children}
         </main>
       </div>
