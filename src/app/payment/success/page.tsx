@@ -18,7 +18,7 @@ interface OrderDetails {
       name: string
       business_name: string | null
     }
-  }
+  } | null  // Może być null lub pojedynczy obiekt
 }
 
 export default function PaymentSuccessPage() {
@@ -57,7 +57,22 @@ export default function PaymentSuccessPage() {
           return
         }
 
-        setOrderDetails(order)
+        // Przekształć dane z Supabase (tablice na pojedyncze obiekty)
+        const transformedOrder = {
+          ...order,
+          galleries: Array.isArray(order.galleries) 
+            ? order.galleries[0] 
+            : order.galleries
+        }
+
+        // Sprawdź czy galleries.photographers jest tablicą
+        if (transformedOrder.galleries?.photographers) {
+          transformedOrder.galleries.photographers = Array.isArray(transformedOrder.galleries.photographers)
+            ? transformedOrder.galleries.photographers[0]
+            : transformedOrder.galleries.photographers
+        }
+
+        setOrderDetails(transformedOrder)
       } catch (error) {
         console.error('Error loading order:', error)
         setError('Błąd podczas ładowania szczegółów zamówienia')
@@ -141,13 +156,13 @@ export default function PaymentSuccessPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Galeria:</span>
-              <span>{orderDetails.galleries.title}</span>
+              <span>{orderDetails.galleries?.title || 'Brak danych'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Fotograf:</span>
               <span>
-                {orderDetails.galleries.photographers.business_name || 
-                 orderDetails.galleries.photographers.name}
+                {orderDetails.galleries?.photographers?.business_name || 
+                 orderDetails.galleries?.photographers?.name || 'Brak danych'}
               </span>
             </div>
             <div className="flex justify-between">
@@ -245,7 +260,7 @@ export default function PaymentSuccessPage() {
 
           <p className="text-xs text-gray-500 mt-4">
             Masz pytania? Skontaktuj się z fotografem:{' '}
-            {orderDetails.galleries.photographers.name}
+            {orderDetails.galleries?.photographers?.name || 'Nie można załadować danych fotografa'}
           </p>
         </div>
       </div>
