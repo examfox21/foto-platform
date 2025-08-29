@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import {
-  P24,
+
+// Try different import syntax
+import P24, {
   Order,
   Currency,
   Country,
