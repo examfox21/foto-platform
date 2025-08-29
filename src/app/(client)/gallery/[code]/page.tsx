@@ -179,26 +179,31 @@ export default function ClientGalleryPage() {
 
     try {
       // ZAWSZE sprawdzamy w bazie danych, nie tylko w lokalnym stanie
+      console.log(`Checking selection for photo ${photo.id.substring(0, 8)} and client ${gallery.client_id.substring(0, 8)}`)
+      
       const { data: existingSelectionInDB, error: checkError } = await supabase
         .from('client_selections')
         .select('*')
         .eq('photo_id', photo.id)
         .eq('client_id', gallery.client_id)
-        .maybeSingle() // maybeSingle() nie rzuca błędu gdy nie ma rekordów
+        .maybeSingle()
 
       if (checkError) {
         console.error('Error checking existing selection:', checkError)
         throw checkError
       }
 
+      console.log('Existing selection in DB:', existingSelectionInDB)
+
       if (existingSelectionInDB) {
         // Remove selection - istnieje w bazie
-        console.log('Removing existing selection from DB:', existingSelectionInDB)
+        console.log('Removing existing selection from DB:', existingSelectionInDB.id)
         
         const { error: deleteError } = await supabase
           .from('client_selections')
           .delete()
-          .eq('id', existingSelectionInDB.id)
+          .eq('photo_id', photo.id)  // Użyj photo_id + client_id zamiast tylko id
+          .eq('client_id', gallery.client_id)  // dla większej pewności
 
         if (deleteError) {
           console.error('Delete error:', deleteError)
@@ -206,12 +211,25 @@ export default function ClientGalleryPage() {
         }
 
         // Aktualizuj lokalny stan - usuń wszystkie wpisy dla tego zdjęcia
-        setSelections(prev => prev.filter(s => s.photo_id !== photo.id))
+        setSelections(prev => {
+          const newState = prev.filter(s => s.photo_id !== photo.id)
+          console.log(`Removed selection. Old count: ${prev.length}, new count: ${newState.length}`)
+          return newState
+        })
         console.log('Selection removed successfully')
+        
+        // Poczekaj chwilę żeby baza danych się zsynchronizowała
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
       } else {
         // Add selection - nie istnieje w bazie
-        const packageSelections = selections.filter(s => s.selected_for_package).length
-        const isForPackage = packageSelections < gallery.package_photos_count
+        console.log('Adding new selection')
+        
+        // Sprawdź ile już mamy wybranych w pakiecie
+        const currentPackageSelections = selections.filter(s => s.selected_for_package).length
+        const isForPackage = currentPackageSelections < gallery.package_photos_count
+        
+        console.log(`Package selections: ${currentPackageSelections}/${gallery.package_photos_count}, isForPackage: ${isForPackage}`)
 
         const selectionData = {
           photo_id: photo.id,
@@ -232,49 +250,63 @@ export default function ClientGalleryPage() {
         if (insertError) {
           console.error('Insert error:', insertError)
           
-          // Jeśli nadal błąd duplicate key, może być race condition
+          // Jeśli nadal błąd duplicate key, znaczy że w bazie danych jest rekord
           if (insertError.code === '23505') {
-            console.log('Duplicate key detected, trying to fetch existing record')
-            // Spróbuj pobrać istniejący rekord i zaktualizować stan
-            const { data: existingRecord } = await supabase
+            console.log('Duplicate key detected, refreshing state from database...')
+            
+            // Wymuś pełne odświeżenie stanu z bazy danych
+            const { data: allSelections, error: refreshError } = await supabase
               .from('client_selections')
               .select('*')
-              .eq('photo_id', photo.id)
+              .eq('gallery_id', gallery.id)
               .eq('client_id', gallery.client_id)
-              .single()
             
-            if (existingRecord) {
-              setSelections(prev => {
-                const filtered = prev.filter(s => s.photo_id !== photo.id)
-                return [...filtered, existingRecord]
-              })
-              return
+            if (refreshError) {
+              console.error('Refresh error:', refreshError)
+              throw refreshError
             }
+            
+            console.log('Refreshed selections from DB:', allSelections)
+            setSelections(allSelections || [])
+            
+            // Sprawdź czy teraz zdjęcie jest wybrane
+            const isNowSelected = allSelections?.some(s => s.photo_id === photo.id)
+            console.log(`Photo ${photo.id.substring(0, 8)} is now selected: ${isNowSelected}`)
+            
+            return // Zakończ funkcję
           }
           
           throw insertError
         }
 
         console.log('Selection added successfully:', data)
+        
         // Aktualizuj lokalny stan - usuń stare wpisy dla tego zdjęcia i dodaj nowy
         setSelections(prev => {
           const filtered = prev.filter(s => s.photo_id !== photo.id)
-          return [...filtered, data]
+          const newState = [...filtered, data]
+          console.log(`Added selection. Old count: ${prev.length}, new count: ${newState.length}`)
+          return newState
         })
       }
     } catch (error: any) {
       console.error('Error toggling selection:', error)
       alert(`Błąd podczas wybierania zdjęcia: ${error.message}`)
       
-      // Wymuś odświeżenie stanu z bazy danych
-      console.log('Refreshing selections from database...')
-      const { data: freshSelections } = await supabase
-        .from('client_selections')
-        .select('*')
-        .eq('gallery_id', gallery.id)
-        .eq('client_id', gallery.client_id)
-      
-      setSelections(freshSelections || [])
+      // W przypadku jakiegokolwiek błędu, wymuś odświeżenie stanu z bazy danych
+      console.log('Error occurred, forcing state refresh...')
+      try {
+        const { data: freshSelections } = await supabase
+          .from('client_selections')
+          .select('*')
+          .eq('gallery_id', gallery.id)
+          .eq('client_id', gallery.client_id)
+        
+        console.log('Force refreshed selections:', freshSelections)
+        setSelections(freshSelections || [])
+      } catch (refreshError) {
+        console.error('Failed to refresh selections:', refreshError)
+      }
     }
   }
 
@@ -454,16 +486,29 @@ export default function ClientGalleryPage() {
       <div className="max-w-6xl mx-auto px-4 py-2">
         <div className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg p-3">
           <div className="text-sm text-yellow-800">
-            Debug: {selections.length} selections in state
+            Debug: {selections.length} selections in state | Selected photos: {selections.map(s => s.photo_id.substring(0, 8)).join(', ')}
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={refreshSelections}
-            className="text-yellow-800 border-yellow-300"
-          >
-            Odśwież wybory
-          </Button>
+          <div className="flex space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={refreshSelections}
+              className="text-yellow-800 border-yellow-300"
+            >
+              Odśwież wybory
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                console.log('Current selections state:', selections)
+                console.log('Photos:', photos.map(p => ({id: p.id.substring(0, 8), selected: isPhotoSelected(p.id)})))
+              }}
+              className="text-yellow-800 border-yellow-300"
+            >
+              Log Debug
+            </Button>
+          </div>
         </div>
       </div>
 
