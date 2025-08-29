@@ -1,15 +1,197 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { supabase } from '@/lib/supabase'
-import { P24, Order, Currency, Country, Language, Encoding } from '@ingameltd/node-przelewy24'
 
-const merchantId = parseInt(process.env.P24_MERCHANT_ID!)
-const posId = process.env.P24_POS_ID!
-const apiKey = process.env.P24_API_KEY!
-const crcKey = process.env.P24_CRC_KEY!
-const sandbox = process.env.P24_SANDBOX === 'true'
+const P24_MERCHANT_ID = process.env.P24_MERCHANT_ID!
+const P24_POS_ID = process.env.P24_POS_ID!
+const P24_API_KEY = process.env.P24_API_KEY!
+const P24_CRC_KEY = process.env.P24_CRC_KEY!
+const P24_SANDBOX = process.env.P24_SANDBOX === 'true'
 
-// Initialize P24 with credentials
-const p24 = new P24(merchantId, posId, apiKey, crcKey, { sandbox })
+const P24_URL = P24_SANDBOX 
+  ? 'https://sandbox.przelewy24.pl/api/v1'
+  : 'https://secure.przelewy24.pl/api/v1'
+
+interface PaymentRequest {
+  gallery_id: string
+  client_id: string
+  selected_photos: string[]
+  client_email: string
+  client_name: string
+}
+
+export async function POST(request: NextRequest) {
+  console.log('=== P24 API INIT START ===')
+  
+  try {
+    // Check environment variables
+    console.log('Environment check:', {
+      MERCHANT_ID: !!P24_MERCHANT_ID,
+      POS_ID: !!P24_POS_ID,
+      API_KEY: !!P24_API_KEY,
+      CRC_KEY: !!P24_CRC_KEY,
+      SANDBOX: P24_SANDBOX
+    })
+
+    const body: PaymentRequest = await request.json()
+    console.log('Request body received:', body)
+    
+    // Walidacja danych wejściowych
+    if (!body.gallery_id || !body.client_id || !body.selected_photos?.length) {
+      console.error('Validation failed - missing required data')
+      return NextResponse.json(
+        { error: 'Brakuje wymaganych danych' },
+        { status: 400 }
+      )
+    }
+
+    console.log('Step 1: Loading gallery...')
+    // Pobierz dane galerii
+    const { data: gallery, error: galleryError } = await supabase
+      .from('galleries')
+      .select(`
+        *,
+        photographers(name, email, business_name)
+      `)
+      .eq('id', body.gallery_id)
+      .single()
+
+    if (galleryError || !gallery) {
+      console.error('Gallery error:', galleryError)
+      return NextResponse.json(
+        { error: 'Nie znaleziono galerii' },
+        { status: 404 }
+      )
+    }
+    console.log('Gallery loaded:', gallery.title)
+
+    console.log('Step 2: Loading selections...')
+    // Pobierz wybrane zdjęcia - debug query
+    console.log('Selection query params:', {
+      gallery_id: body.gallery_id,
+      client_id: body.client_id,
+      photo_ids: body.selected_photos
+    })
+
+    const { data: selections, error: selectionsError } = await supabase
+      .from('client_selections')
+      .select('*, photos(filename)')
+      .eq('gallery_id', body.gallery_id)
+      .eq('client_id', body.client_id)
+      .in('photo_id', body.selected_photos)
+
+    console.log('Selections result:', { 
+      selections: selections?.length || 0, 
+      error: selectionsError 
+    })
+
+    if (selectionsError) {
+      console.error('Selections error:', selectionsError)
+      return NextResponse.json(
+        { error: 'Błąd podczas pobierania wybranych zdjęć' },
+        { status: 500 }
+      )
+    }
+
+    if (!selections?.length) {
+      // Debug: sprawdź co jest w tabeli client_selections
+      console.log('No selections found, debugging...')
+      const { data: allSelections } = await supabase
+        .from('client_selections')
+        .select('*')
+        .eq('gallery_id', body.gallery_id)
+        .eq('client_id', body.client_id)
+      
+      console.log('All selections for this client:', allSelections)
+      
+      return NextResponse.json(
+        { 
+          error: 'Nie znaleziono wybranych zdjęć',
+          debug: {
+            gallery_id: body.gallery_id,
+            client_id: body.client_id,
+            requested_photos: body.selected_photos,
+            all_client_selections: allSelections
+          }
+        },
+        { status: 404 }
+      )
+    }
+
+    console.log('Step 3: Calculating amounts...')
+    // Oblicz kwoty
+    const packageSelections = selections.filter(s => s.selected_for_package)
+    const additionalSelections = selections.filter(s => s.is_additional_purchase)
+    const additionalCost = additionalSelections.length * gallery.additional_photo_price
+    
+    console.log('Amount calculation:', {
+      totalSelections: selections.length,
+      packageSelections: packageSelections.length,
+      additionalSelections: additionalSelections.length,
+      pricePerPhoto: gallery.additional_photo_price,
+      additionalCost
+    })
+    
+    if (additionalCost <= 0) {
+      console.log('No additional cost - only package photos')
+      return NextResponse.json(
+        { error: 'Brak dodatkowych zdjęć do płatności' },
+        { status: 400 }
+      )
+    }
+
+    console.log('Step 4: Creating order...')
+    // Stwórz zamówienie w bazie danych
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .insert({
+        gallery_id: body.gallery_id,
+        client_id: body.client_id,
+        photographer_id: gallery.photographer_id,
+        total_amount: additionalCost,
+        status: 'pending'
+      })
+      .select()
+      .single()
+
+    if (orderError || !order) {
+      console.error('Order creation error:', orderError)
+      return NextResponse.json(
+        { error: 'Błąd podczas tworzenia zamówienia' },
+        { status: 500 }
+      )
+    }
+    console.log('Order created:', order.id)
+
+    // Dla testów - zwróć sukces bez rzeczywistego P24
+    console.log('Step 5: Returning test success (P24 integration disabled for debugging)')
+    
+    return NextResponse.json({
+      success: true,
+      payment_url: 'https://sandbox.przelewy24.pl/test-payment',
+      session_id: `TEST_${order.id}`,
+      order_id: order.id,
+      amount: additionalCost,
+      additional_photos: additionalSelections.length,
+      debug: {
+        selections_found: selections.length,
+        package_photos: packageSelections.length,
+        additional_photos: additionalSelections.length,
+        total_cost: additionalCost
+      }
+    })
+
+  } catch (error: any) {
+    console.error('Payment init error:', error)
+    return NextResponse.json(
+      { 
+        error: 'Błąd serwera podczas inicjalizacji płatności', 
+        details: error.message 
+      },
+      { status: 500 }
+    )
+  }
+}24 = new P24(merchantId, posId, apiKey, crcKey, { sandbox })
 
 interface PaymentRequest {
   gallery_id: string
