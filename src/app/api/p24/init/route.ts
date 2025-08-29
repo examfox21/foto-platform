@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { supabase } from '@/lib/supabase'
-
+ 
 const P24_MERCHANT_ID = process.env.P24_MERCHANT_ID!
 const P24_POS_ID = process.env.P24_POS_ID!
 const P24_API_KEY = process.env.P24_API_KEY!
