@@ -20,6 +20,29 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { supabase } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
 
+// Add gallery grid styles
+const galleryGridStyles = `
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem;
+  }
+  
+  @media (min-width: 640px) {
+    .gallery-grid {
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 1rem;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    .gallery-grid {
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+  }
+`
+
 interface Gallery {
   id: string
   title: string
@@ -65,6 +88,8 @@ export default function ClientGalleryPage() {
   const [error, setError] = useState('')
   const [viewMode, setViewMode] = useState<'select' | 'preview'>('select')
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null)
+  const [showLightbox, setShowLightbox] = useState(false)
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
   const params = useParams()
 
   useEffect(() => {
@@ -162,7 +187,10 @@ export default function ClientGalleryPage() {
           .delete()
           .eq('id', existingSelection.id)
 
-        if (error) throw error
+        if (error) {
+          console.error('Delete error:', error)
+          throw error
+        }
 
         setSelections(prev => prev.filter(s => s.id !== existingSelection.id))
       } else {
@@ -170,25 +198,33 @@ export default function ClientGalleryPage() {
         const packageSelections = selections.filter(s => s.selected_for_package).length
         const isForPackage = packageSelections < gallery.package_photos_count
 
+        const selectionData = {
+          photo_id: photo.id,
+          gallery_id: gallery.id,
+          client_id: gallery.client_id,
+          selected_for_package: isForPackage,
+          is_additional_purchase: !isForPackage
+        }
+
+        console.log('Inserting selection:', selectionData)
+
         const { data, error } = await supabase
           .from('client_selections')
-          .insert({
-            photo_id: photo.id,
-            gallery_id: gallery.id,
-            client_id: gallery.client_id, // Poprawka: używamy client_id zamiast clients.id
-            selected_for_package: isForPackage,
-            is_additional_purchase: !isForPackage
-          })
+          .insert(selectionData)
           .select()
           .single()
 
-        if (error) throw error
+        if (error) {
+          console.error('Insert error:', error)
+          throw error
+        }
 
+        console.log('Selection added:', data)
         setSelections(prev => [...prev, data])
       }
     } catch (error: any) {
       console.error('Error toggling selection:', error)
-      alert('Błąd podczas wybierania zdjęcia')
+      alert(`Błąd podczas wybierania zdjęcia: ${error.message}`)
     }
   }
 
@@ -210,6 +246,44 @@ export default function ClientGalleryPage() {
     // TODO: Implement checkout process with Przelewy24
     alert('Funkcja płatności zostanie wkrótce dodana!')
   }
+
+  const openLightbox = (photoIndex: number) => {
+    setCurrentPhotoIndex(photoIndex)
+    setShowLightbox(true)
+  }
+
+  const closeLightbox = () => {
+    setShowLightbox(false)
+  }
+
+  const nextPhoto = () => {
+    setCurrentPhotoIndex((prev) => (prev + 1) % photos.length)
+  }
+
+  const prevPhoto = () => {
+    setCurrentPhotoIndex((prev) => (prev - 1 + photos.length) % photos.length)
+  }
+
+  const handleKeyPress = (e: KeyboardEvent) => {
+    if (!showLightbox) return
+    
+    switch (e.key) {
+      case 'Escape':
+        closeLightbox()
+        break
+      case 'ArrowLeft':
+        prevPhoto()
+        break
+      case 'ArrowRight':
+        nextPhoto()
+        break
+    }
+  }
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyPress)
+    return () => document.removeEventListener('keydown', handleKeyPress)
+  }, [showLightbox])
 
   if (loading) {
     return (
@@ -247,6 +321,7 @@ export default function ClientGalleryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <style jsx>{galleryGridStyles}</style>
       {/* Header */}
       <div className="bg-white border-b sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 py-4">
@@ -307,7 +382,7 @@ export default function ClientGalleryPage() {
       {/* Photos Grid */}
       <div className="max-w-6xl mx-auto px-4 pb-24">
         <div className="gallery-grid">
-          {photos.map((photo) => {
+          {photos.map((photo, index) => {
             const isSelected = isPhotoSelected(photo.id)
             const imageUrl = photo.watermark_url || photo.thumbnail_url
             
@@ -331,6 +406,19 @@ export default function ClientGalleryPage() {
                   `}
                   onClick={() => togglePhotoSelection(photo)}
                 >
+                  {/* Preview Button */}
+                  <div className="absolute top-2 left-2">
+                    <div 
+                      className="w-8 h-8 rounded-full bg-white/80 text-gray-600 group-hover:bg-white flex items-center justify-center transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openLightbox(index)
+                      }}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </div>
+                  </div>
+
                   {/* Selection Button */}
                   <div className="absolute top-2 right-2">
                     <div className={`
@@ -441,6 +529,89 @@ export default function ClientGalleryPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Lightbox Modal */}
+      {showLightbox && photos.length > 0 && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
+          {/* Close Button */}
+          <button
+            onClick={closeLightbox}
+            className="absolute top-4 right-4 z-60 text-white hover:text-gray-300 transition-colors"
+          >
+            <X className="h-8 w-8" />
+          </button>
+
+          {/* Navigation Buttons */}
+          {photos.length > 1 && (
+            <>
+              <button
+                onClick={prevPhoto}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-60 text-white hover:text-gray-300 transition-colors p-2"
+              >
+                <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <button
+                onClick={nextPhoto}
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-60 text-white hover:text-gray-300 transition-colors p-2"
+              >
+                <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </>
+          )}
+
+          {/* Photo Container */}
+          <div className="relative max-w-7xl max-h-full mx-4 flex items-center justify-center">
+            <img
+              src={photos[currentPhotoIndex]?.watermark_url || photos[currentPhotoIndex]?.thumbnail_url}
+              alt={photos[currentPhotoIndex]?.filename}
+              className="max-w-full max-h-full object-contain"
+              style={{ maxHeight: 'calc(100vh - 120px)' }}
+            />
+          </div>
+
+          {/* Photo Info */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center text-white">
+            <div className="bg-black/50 px-4 py-2 rounded-lg">
+              <div className="text-sm">
+                #{photos[currentPhotoIndex]?.upload_order} • {currentPhotoIndex + 1} z {photos.length}
+              </div>
+              <div className="flex items-center justify-center space-x-4 mt-2">
+                {/* Selection Toggle in Lightbox */}
+                <button
+                  onClick={() => togglePhotoSelection(photos[currentPhotoIndex])}
+                  className={`flex items-center space-x-1 px-3 py-1 rounded transition-colors ${
+                    isPhotoSelected(photos[currentPhotoIndex]?.id)
+                      ? 'bg-primary text-white'
+                      : 'bg-white/20 text-white hover:bg-white/30'
+                  }`}
+                >
+                  {isPhotoSelected(photos[currentPhotoIndex]?.id) ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      <span>Wybrane</span>
+                    </>
+                  ) : (
+                    <>
+                      <Heart className="h-4 w-4" />
+                      <span>Wybierz</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Click outside to close */}
+          <div 
+            className="absolute inset-0 -z-10"
+            onClick={closeLightbox}
+          />
+        </div>
+      )}
     </div>
   )
 }
