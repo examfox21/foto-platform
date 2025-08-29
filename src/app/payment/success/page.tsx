@@ -12,13 +12,30 @@ interface OrderDetails {
   total_amount: number
   status: string
   created_at: string
-  galleries: {
-    title: string
-    photographers: {
-      name: string
-      business_name: string | null
-    }
-  } | null  // Może być null lub pojedynczy obiekt
+  galleries: any // Uproszczenie typów żeby uniknąć konfliktów
+}
+
+// Helper functions dla bezpiecznego dostępu do danych
+const getGalleryTitle = (galleries: any): string => {
+  if (Array.isArray(galleries)) {
+    return galleries[0]?.title || 'Brak danych'
+  }
+  return galleries?.title || 'Brak danych'
+}
+
+const getPhotographerName = (galleries: any): string => {
+  let photographers
+  if (Array.isArray(galleries)) {
+    photographers = galleries[0]?.photographers
+  } else {
+    photographers = galleries?.photographers
+  }
+
+  if (Array.isArray(photographers)) {
+    const photographer = photographers[0]
+    return photographer?.business_name || photographer?.name || 'Brak danych'
+  }
+  return photographers?.business_name || photographers?.name || 'Brak danych'
 }
 
 export default function PaymentSuccessPage() {
@@ -57,22 +74,16 @@ export default function PaymentSuccessPage() {
           return
         }
 
-        // Przekształć dane z Supabase (tablice na pojedyncze obiekty)
-        const transformedOrder = {
-          ...order,
-          galleries: Array.isArray(order.galleries) 
-            ? order.galleries[0] 
-            : order.galleries
+        // Bezpieczna transformacja danych z Supabase
+        const safeOrder: OrderDetails = {
+          id: order.id,
+          total_amount: order.total_amount,
+          status: order.status,
+          created_at: order.created_at,
+          galleries: order.galleries
         }
 
-        // Sprawdź czy galleries.photographers jest tablicą
-        if (transformedOrder.galleries?.photographers) {
-          transformedOrder.galleries.photographers = Array.isArray(transformedOrder.galleries.photographers)
-            ? transformedOrder.galleries.photographers[0]
-            : transformedOrder.galleries.photographers
-        }
-
-        setOrderDetails(transformedOrder)
+        setOrderDetails(safeOrder)
       } catch (error) {
         console.error('Error loading order:', error)
         setError('Błąd podczas ładowania szczegółów zamówienia')
@@ -156,14 +167,11 @@ export default function PaymentSuccessPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Galeria:</span>
-              <span>{orderDetails.galleries?.title || 'Brak danych'}</span>
+              <span>{getGalleryTitle(orderDetails.galleries)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Fotograf:</span>
-              <span>
-                {orderDetails.galleries?.photographers?.business_name || 
-                 orderDetails.galleries?.photographers?.name || 'Brak danych'}
-              </span>
+              <span>{getPhotographerName(orderDetails.galleries)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Kwota:</span>
@@ -260,7 +268,7 @@ export default function PaymentSuccessPage() {
 
           <p className="text-xs text-gray-500 mt-4">
             Masz pytania? Skontaktuj się z fotografem:{' '}
-            {orderDetails.galleries?.photographers?.name || 'Nie można załadować danych fotografa'}
+            {getPhotographerName(orderDetails.galleries)}
           </p>
         </div>
       </div>
