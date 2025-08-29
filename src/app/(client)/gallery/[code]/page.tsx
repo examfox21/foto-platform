@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { supabase } from '@/lib/supabase'
 import { formatDate, formatCurrency } from '@/lib/utils'
+import CheckoutModal from '@/components/checkout/CheckoutModal'
 
 // Add gallery grid styles
 const galleryGridStyles = `
@@ -90,6 +91,7 @@ export default function ClientGalleryPage() {
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null)
   const [showLightbox, setShowLightbox] = useState(false)
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
+  const [showCheckout, setShowCheckout] = useState(false)
   const params = useParams()
 
   useEffect(() => {
@@ -356,8 +358,7 @@ export default function ClientGalleryPage() {
   }
 
   const handleProceedToCheckout = () => {
-    // TODO: Implement checkout process with Przelewy24
-    alert('Funkcja płatności zostanie wkrótce dodana!')
+    setShowCheckout(true)
   }
 
   // Funkcja do czyszczenia duplikatów i odświeżania stanu
@@ -512,36 +513,6 @@ export default function ClientGalleryPage() {
           <p className="text-gray-700">{gallery.description}</p>
         </div>
       )}
-
-      {/* Debug Panel - Remove in production */}
-      <div className="max-w-6xl mx-auto px-4 py-2">
-        <div className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-          <div className="text-sm text-yellow-800">
-            Debug: {selections.length} selections in state | Selected photos: {selections.map(s => s.photo_id.substring(0, 8)).join(', ')}
-          </div>
-          <div className="flex space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={refreshSelections}
-              className="text-yellow-800 border-yellow-300"
-            >
-              Odśwież wybory
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                console.log('Current selections state:', selections)
-                console.log('Photos:', photos.map(p => ({id: p.id.substring(0, 8), selected: isPhotoSelected(p.id)})))
-              }}
-              className="text-yellow-800 border-yellow-300"
-            >
-              Log Debug
-            </Button>
-          </div>
-        </div>
-      </div>
 
       {/* Photos Grid */}
       <div className="max-w-6xl mx-auto px-4 pb-24">
@@ -776,6 +747,21 @@ export default function ClientGalleryPage() {
           />
         </div>
       )}
+
+      {/* Checkout Modal */}
+      <CheckoutModal
+        isOpen={showCheckout}
+        onClose={() => setShowCheckout(false)}
+        gallery={gallery}
+        selections={{
+          packageSelections: stats.packageSelections,
+          additionalSelections: stats.additionalSelections,
+          totalCost: stats.totalCost,
+          selectedPhotos: selections
+            .filter(s => s.is_additional_purchase)
+            .map(s => s.photo_id)
+        }}
+      />
     </div>
   )
 }
