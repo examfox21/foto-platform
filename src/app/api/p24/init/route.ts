@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
-// Try different import syntax
-import P24, {
-  Order,
-  Currency,
-  Country,
-  Language,
-  Encoding
-} from '@ingameltd/node-przelewy24'
+// Alternative import - use require for now
+const { P24, Order, Currency, Country, Language, Encoding } = require('@ingameltd/node-przelewy24')
 
 const merchantId = parseInt(process.env.P24_MERCHANT_ID!)
 const posId = process.env.P24_POS_ID!
