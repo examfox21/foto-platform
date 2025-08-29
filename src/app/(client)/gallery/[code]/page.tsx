@@ -199,15 +199,31 @@ export default function ClientGalleryPage() {
         // Remove selection - istnieje w bazie
         console.log('Removing existing selection from DB:', existingSelectionInDB.id)
         
-        const { error: deleteError } = await supabase
+        // Spróbuj usunąć używając dokładnego ID
+        const { error: deleteError, count } = await supabase
           .from('client_selections')
-          .delete()
-          .eq('photo_id', photo.id)  // Użyj photo_id + client_id zamiast tylko id
-          .eq('client_id', gallery.client_id)  // dla większej pewności
+          .delete({ count: 'exact' })
+          .eq('id', existingSelectionInDB.id)
+
+        console.log('Delete operation result - error:', deleteError, 'deleted count:', count)
 
         if (deleteError) {
           console.error('Delete error:', deleteError)
           throw deleteError
+        }
+
+        if (count === 0) {
+          console.warn('DELETE returned 0 rows - record may not have been deleted')
+          // Sprawdź czy rekord nadal istnieje
+          const { data: stillExists } = await supabase
+            .from('client_selections')
+            .select('id')
+            .eq('id', existingSelectionInDB.id)
+            .maybeSingle()
+          
+          if (stillExists) {
+            throw new Error('Nie udało się usunąć rekordu - sprawdź uprawnienia')
+          }
         }
 
         // Aktualizuj lokalny stan - usuń wszystkie wpisy dla tego zdjęcia
@@ -219,7 +235,22 @@ export default function ClientGalleryPage() {
         console.log('Selection removed successfully')
         
         // Poczekaj chwilę żeby baza danych się zsynchronizowała
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise(resolve => setTimeout(resolve, 200))
+        
+        // Weryfikuj że rekord został usunięty
+        const { data: verifyDeleted } = await supabase
+          .from('client_selections')
+          .select('id')
+          .eq('photo_id', photo.id)
+          .eq('client_id', gallery.client_id)
+          .maybeSingle()
+        
+        if (verifyDeleted) {
+          console.error('BŁĄD: Rekord nadal istnieje po DELETE!', verifyDeleted)
+          throw new Error('Rekord nie został usunięty z bazy danych')
+        }
+        
+        console.log('Verified: Record successfully deleted from database')
         
       } else {
         // Add selection - nie istnieje w bazie
