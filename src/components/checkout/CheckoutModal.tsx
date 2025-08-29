@@ -75,27 +75,51 @@ export default function CheckoutModal({
 
     setIsLoading(true)
     
+    const paymentData = {
+      gallery_id: gallery.id,
+      client_id: gallery.client_id,
+      selected_photos: selections.selectedPhotos,
+      client_email: clientEmail,
+      client_name: clientName
+    }
+    
+    console.log('=== PAYMENT DEBUG ===')
+    console.log('Gallery ID:', gallery.id)
+    console.log('Client ID:', gallery.client_id)
+    console.log('Selected photos:', selections.selectedPhotos)
+    console.log('Total cost:', selections.totalCost)
+    console.log('Payment data being sent:', paymentData)
+    
     try {
+      console.log('Making API call to /api/p24/init...')
+      
       const response = await fetch('/api/p24/init', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          gallery_id: gallery.id,
-          client_id: gallery.client_id,
-          selected_photos: selections.selectedPhotos,
-          client_email: clientEmail,
-          client_name: clientName
-        })
+        body: JSON.stringify(paymentData)
       })
 
-      const data = await response.json()
+      console.log('Response status:', response.status)
+      console.log('Response ok:', response.ok)
+      
+      if (!response.ok) {
+        console.error('API response not ok:', response.status, response.statusText)
+        const errorText = await response.text()
+        console.error('Error response body:', errorText)
+        alert(`Błąd API: ${response.status} - ${response.statusText}`)
+        return
+      }
 
-      if (response.ok && data.success) {
-        // Przekieruj do Przelewy24
+      const data = await response.json()
+      console.log('Response data:', data)
+
+      if (data.success) {
+        console.log('Payment initialization successful, redirecting to:', data.payment_url)
         window.location.href = data.payment_url
       } else {
+        console.error('API returned success: false:', data)
         alert(`Błąd: ${data.error}`)
       }
     } catch (error) {
