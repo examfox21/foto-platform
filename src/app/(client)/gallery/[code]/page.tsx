@@ -28,7 +28,9 @@ interface Gallery {
   package_photos_count: number
   additional_photo_price: number
   expires_at: string | null
+  client_id: string // Dodajemy client_id bezpośrednio
   clients: {
+    id: string // Dodajemy id do clients
     name: string
     email: string
   }
@@ -68,7 +70,7 @@ export default function ClientGalleryPage() {
   useEffect(() => {
     const loadGallery = async () => {
       try {
-        // Load gallery by access code
+        // Load gallery by access code - dodajemy client_id i id do clients
         const { data: galleryData, error: galleryError } = await supabase
           .from('galleries')
           .select(`
@@ -79,7 +81,8 @@ export default function ClientGalleryPage() {
             package_photos_count,
             additional_photo_price,
             expires_at,
-            clients(name, email),
+            client_id,
+            clients(id, name, email),
             photographers(name, business_name, phone, website)
           `)
           .eq('access_code', params.code)
@@ -121,12 +124,12 @@ export default function ClientGalleryPage() {
 
         setPhotos(photosData || [])
 
-        // Load existing selections for this client
+        // Load existing selections for this client - używamy client_id bezpośrednio
         const { data: selectionsData } = await supabase
           .from('client_selections')
           .select('*')
           .eq('gallery_id', transformedGallery.id)
-          .eq('client_id', transformedGallery.clients.id)
+          .eq('client_id', transformedGallery.client_id) // Poprawka: używamy client_id zamiast clients.id
 
         setSelections(selectionsData || [])
 
@@ -163,7 +166,7 @@ export default function ClientGalleryPage() {
 
         setSelections(prev => prev.filter(s => s.id !== existingSelection.id))
       } else {
-        // Add selection
+        // Add selection - używamy client_id bezpośrednio
         const packageSelections = selections.filter(s => s.selected_for_package).length
         const isForPackage = packageSelections < gallery.package_photos_count
 
@@ -172,7 +175,7 @@ export default function ClientGalleryPage() {
           .insert({
             photo_id: photo.id,
             gallery_id: gallery.id,
-            client_id: gallery.clients.id,
+            client_id: gallery.client_id, // Poprawka: używamy client_id zamiast clients.id
             selected_for_package: isForPackage,
             is_additional_purchase: !isForPackage
           })
