@@ -178,23 +178,38 @@ export default function ClientGalleryPage() {
     if (!gallery) return
 
     try {
-      const existingSelection = selections.find(s => s.photo_id === photo.id)
+      // ZAWSZE sprawdzamy w bazie danych, nie tylko w lokalnym stanie
+      const { data: existingSelectionInDB, error: checkError } = await supabase
+        .from('client_selections')
+        .select('*')
+        .eq('photo_id', photo.id)
+        .eq('client_id', gallery.client_id)
+        .maybeSingle() // maybeSingle() nie rzuca błędu gdy nie ma rekordów
 
-      if (existingSelection) {
-        // Remove selection
-        const { error } = await supabase
+      if (checkError) {
+        console.error('Error checking existing selection:', checkError)
+        throw checkError
+      }
+
+      if (existingSelectionInDB) {
+        // Remove selection - istnieje w bazie
+        console.log('Removing existing selection from DB:', existingSelectionInDB)
+        
+        const { error: deleteError } = await supabase
           .from('client_selections')
           .delete()
-          .eq('id', existingSelection.id)
+          .eq('id', existingSelectionInDB.id)
 
-        if (error) {
-          console.error('Delete error:', error)
-          throw error
+        if (deleteError) {
+          console.error('Delete error:', deleteError)
+          throw deleteError
         }
 
-        setSelections(prev => prev.filter(s => s.id !== existingSelection.id))
+        // Aktualizuj lokalny stan - usuń wszystkie wpisy dla tego zdjęcia
+        setSelections(prev => prev.filter(s => s.photo_id !== photo.id))
+        console.log('Selection removed successfully')
       } else {
-        // Add selection - używamy client_id bezpośrednio
+        // Add selection - nie istnieje w bazie
         const packageSelections = selections.filter(s => s.selected_for_package).length
         const isForPackage = packageSelections < gallery.package_photos_count
 
@@ -206,25 +221,60 @@ export default function ClientGalleryPage() {
           is_additional_purchase: !isForPackage
         }
 
-        console.log('Inserting selection:', selectionData)
+        console.log('Inserting new selection:', selectionData)
 
-        const { data, error } = await supabase
+        const { data, error: insertError } = await supabase
           .from('client_selections')
           .insert(selectionData)
           .select()
           .single()
 
-        if (error) {
-          console.error('Insert error:', error)
-          throw error
+        if (insertError) {
+          console.error('Insert error:', insertError)
+          
+          // Jeśli nadal błąd duplicate key, może być race condition
+          if (insertError.code === '23505') {
+            console.log('Duplicate key detected, trying to fetch existing record')
+            // Spróbuj pobrać istniejący rekord i zaktualizować stan
+            const { data: existingRecord } = await supabase
+              .from('client_selections')
+              .select('*')
+              .eq('photo_id', photo.id)
+              .eq('client_id', gallery.client_id)
+              .single()
+            
+            if (existingRecord) {
+              setSelections(prev => {
+                const filtered = prev.filter(s => s.photo_id !== photo.id)
+                return [...filtered, existingRecord]
+              })
+              return
+            }
+          }
+          
+          throw insertError
         }
 
-        console.log('Selection added:', data)
-        setSelections(prev => [...prev, data])
+        console.log('Selection added successfully:', data)
+        // Aktualizuj lokalny stan - usuń stare wpisy dla tego zdjęcia i dodaj nowy
+        setSelections(prev => {
+          const filtered = prev.filter(s => s.photo_id !== photo.id)
+          return [...filtered, data]
+        })
       }
     } catch (error: any) {
       console.error('Error toggling selection:', error)
       alert(`Błąd podczas wybierania zdjęcia: ${error.message}`)
+      
+      // Wymuś odświeżenie stanu z bazy danych
+      console.log('Refreshing selections from database...')
+      const { data: freshSelections } = await supabase
+        .from('client_selections')
+        .select('*')
+        .eq('gallery_id', gallery.id)
+        .eq('client_id', gallery.client_id)
+      
+      setSelections(freshSelections || [])
     }
   }
 
@@ -245,6 +295,27 @@ export default function ClientGalleryPage() {
   const handleProceedToCheckout = () => {
     // TODO: Implement checkout process with Przelewy24
     alert('Funkcja płatności zostanie wkrótce dodana!')
+  }
+
+  // Funkcja do czyszczenia duplikatów i odświeżania stanu
+  const refreshSelections = async () => {
+    if (!gallery) return
+    
+    try {
+      console.log('Refreshing selections from database...')
+      const { data: freshSelections, error } = await supabase
+        .from('client_selections')
+        .select('*')
+        .eq('gallery_id', gallery.id)
+        .eq('client_id', gallery.client_id)
+      
+      if (error) throw error
+      
+      setSelections(freshSelections || [])
+      console.log('Selections refreshed:', freshSelections)
+    } catch (error: any) {
+      console.error('Error refreshing selections:', error)
+    }
   }
 
   const openLightbox = (photoIndex: number) => {
@@ -378,6 +449,23 @@ export default function ClientGalleryPage() {
           <p className="text-gray-700">{gallery.description}</p>
         </div>
       )}
+
+      {/* Debug Panel - Remove in production */}
+      <div className="max-w-6xl mx-auto px-4 py-2">
+        <div className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+          <div className="text-sm text-yellow-800">
+            Debug: {selections.length} selections in state
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={refreshSelections}
+            className="text-yellow-800 border-yellow-300"
+          >
+            Odśwież wybory
+          </Button>
+        </div>
+      </div>
 
       {/* Photos Grid */}
       <div className="max-w-6xl mx-auto px-4 pb-24">
