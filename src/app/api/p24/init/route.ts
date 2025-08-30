@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Load gallery data with proper client relationship
+    // Load gallery data with photographer_id included
     const { data: gallery, error: galleryError } = await supabase
       .from('galleries')
       .select(`
@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
         package_photos_count,
         additional_photo_price,
         client_id,
+        photographer_id,
         clients!inner(
           id,
           name,
@@ -161,13 +162,13 @@ export async function POST(request: NextRequest) {
       throw new Error('No token received from P24')
     }
     
-    // Store order in database
+    // Store order in database - now photographer_id is available
     const { error: orderError } = await supabase
       .from('orders')
       .insert({
         gallery_id: gallery_id,
         client_id: gallery.client_id,
-        photographer_id: gallery.photographer_id || gallery.client_id,
+        photographer_id: gallery.photographer_id,
         total_amount: totalAmount / 100,
         status: 'pending',
         p24_session_id: sessionId
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      payment_url: paymentUrl, // Zmiana nazwy klucza
+      payment_url: paymentUrl,
       sessionId,
       amount: totalAmount,
       token: p24Response.data.token
