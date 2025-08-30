@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServiceSupabase } from '@/lib/supabase'
 import { createHash } from 'crypto'
 
 // P24 Configuration
@@ -20,6 +20,8 @@ function calculateP24Sign(params: Record<string, any>): string {
 }
 
 export async function POST(request: NextRequest) {
+    // Użyj service role client
+  const supabase = createServiceSupabase()
   try {
     console.log('=== P24 Init API Start ===')
     console.log('Environment check:', {
