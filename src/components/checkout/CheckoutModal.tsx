@@ -115,7 +115,7 @@ export default function CheckoutModal({
       const data = await response.json()
       console.log('Response data:', data)
 
-      if (data.success) {
+      if (data.success && data.payment_url) {
         console.log('Payment initialization successful, redirecting to:', data.payment_url)
         window.location.href = data.payment_url
       } else {
