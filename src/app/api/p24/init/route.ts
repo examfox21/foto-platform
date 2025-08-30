@@ -221,7 +221,8 @@ export async function POST(request: NextRequest) {
     console.log('Sign calculated:', sign.substring(0, 10) + '...')
     
     // Create Basic Auth credentials
-    const credentials = Buffer.from(`${P24_CONFIG.posId}:${process.env.P24_API_KEY}`).toString('base64')
+    const credentials = Buffer.from('345336:29d4a3974b579addd2f18f29f7b83432').toString('base64')
+    console.log('Test credentials:', credentials)
     console.log('Auth credentials prepared')
     
     // Register transaction with P24
