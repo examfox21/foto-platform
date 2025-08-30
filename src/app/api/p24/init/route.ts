@@ -34,23 +34,23 @@ export async function POST(request: NextRequest) {
     }
     
     // Load gallery data with photographer_id included
-    const { data: gallery, error: galleryError } = await supabase
-      .from('galleries')
-      .select(`
-        id,
-        title,
-        package_photos_count,
-        additional_photo_price,
-        client_id,
-        photographer_id,
-        clients!inner(
-          id,
-          name,
-          email
-        )
-      `)
-      .eq('id', gallery_id)
-      .single()
+const { data: gallery, error: galleryError } = await supabase
+  .from('galleries')
+  .select(`
+    id,
+    title,
+    package_photos_count,
+    additional_photo_price,
+    client_id,
+    photographer_id,
+    clients(
+      id,
+      name,
+      email
+    )
+  `)
+  .eq('id', gallery_id)
+  .single()
     
     if (galleryError || !gallery) {
       console.error('Gallery error:', galleryError)
