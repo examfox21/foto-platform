@@ -92,7 +92,9 @@ export default function CheckoutModal({
     
     try {
       console.log('Making API call to /api/p24/init...')
-      
+      console.log('Current URL:', window.location.origin)
+console.log('API endpoint:', '/api/p24/init')
+console.log('Full URL:', window.location.origin + '/api/p24/init')
       const response = await fetch('/api/p24/init', {
         method: 'POST',
         headers: {
