@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
     console.log('Auth credentials prepared')
     
     // Register transaction with P24
-    const p24Url = `${P24_CONFIG.baseUrl}/api/v1/transaction/register`
+    const p24Url = `https://sandbox.przelewy24.pl/api/v1/testAccess`
     console.log('Calling P24 API:', p24Url)
     console.log('P24 Request payload (without sign):', {
       ...transactionData,
