@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "src/app/api/p24/init/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/p24/callback/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}
