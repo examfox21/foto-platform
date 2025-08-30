@@ -174,21 +174,21 @@ export async function POST(request: NextRequest) {
     // Prepare P24 transaction data
     const transactionData = {
       merchantId: P24_CONFIG.merchantId,
-      posId: P24_CONFIG.posId,
-      sessionId: sessionId,
-      amount: totalAmount,
-      currency: 'PLN',
-      description: `Zdjęcia z galerii: ${gallery.title}`,
-      email: clientData.email,
-      client: clientData.name,
-      country: 'PL',
-      language: 'pl',
-      urlReturn: `${process.env.NEXT_PUBLIC_APP_URL || 'https://foto-platform.vercel.app'}/gallery/${gallery_id}/success`,
-      urlStatus: `${process.env.NEXT_PUBLIC_APP_URL || 'https://foto-platform.vercel.app'}/api/p24/callback`,
-      timeLimit: 30,
-      channel: 16,
-      waitForResult: false,
-      regulationAccept: false
+  posId: P24_CONFIG.posId,
+  sessionId: sessionId,
+  amount: totalAmount,
+  currency: 'PLN',
+  description: `Zdjęcia z galerii: ${gallery.title}`,
+  email: clientData.email,
+  client: clientData.name,  // ZMIEŃ NA: clientName
+  country: 'PL',
+  language: 'pl',
+  urlReturn: `${process.env.NEXT_PUBLIC_APP_URL || 'https://foto-platform.vercel.app'}/gallery/${gallery_id}/success`,
+  urlStatus: `${process.env.NEXT_PUBLIC_APP_URL || 'https://foto-platform.vercel.app'}/api/p24/callback`,
+  timeLimit: 30,
+  channel: 16,
+  waitForResult: false,
+  regulationAccept: false
     }
     
     console.log('Transaction data prepared:', {
