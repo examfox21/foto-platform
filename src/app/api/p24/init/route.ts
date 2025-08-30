@@ -6,95 +6,24 @@ import { createHash } from 'crypto'
 const P24_CONFIG = {
   merchantId: parseInt(process.env.P24_MERCHANT_ID!),
   posId: parseInt(process.env.P24_POS_ID!),
+  apiKey: process.env.P24_API_KEY!,
   crcKey: process.env.P24_CRC_KEY!,
   sandbox: process.env.P24_SANDBOX === 'true',
   baseUrl: process.env.P24_SANDBOX === 'true' 
-    ? 'https://sandbox.przelewy24.pl/api/v1' 
-    : 'https://secure.przelewy24.pl/api/v1'
+    ? 'https://sandbox.przelewy24.pl' 
+    : 'https://secure.przelewy24.pl'
 }
 
-// P24 API Functions
 function calculateP24Sign(params: Record<string, any>): string {
   const jsonString = JSON.stringify(params, null, 0)
-    .replace(/\//g, '/')
-    .replace(/\u00a0/g, ' ')
-  
   return createHash('sha384').update(jsonString, 'utf8').digest('hex')
-}
-
-async function registerP24Transaction(transactionData: any) {
-  const signData = {
-    sessionId: transactionData.sessionId,
-    merchantId: transactionData.merchantId,
-    amount: transactionData.amount,
-    currency: transactionData.currency,
-    crc: P24_CONFIG.crcKey
-  }
-  
-  const sign = calculateP24Sign(signData)
-  
-  const payload = {
-    ...transactionData,
-    sign
-  }
-  
-  const credentials = Buffer.from(`${P24_CONFIG.posId}:${P24_CONFIG.crcKey}`).toString('base64')
-  
-  const response = await fetch(`${P24_CONFIG.baseUrl}/transaction/register`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Basic ${credentials}`
-    },
-    body: JSON.stringify(payload)
-  })
-  
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`P24 API error: ${response.status} - ${errorText}`)
-  }
-  
-  return response.json()
-}
-
-interface PaymentRequest {
-  gallery_id: string
-}
-
-interface GalleryData {
-  id: string
-  title: string
-  package_photos_count: number
-  additional_photo_price: number
-  clients: {
-    name: string
-    email: string
-  } | null
-}
-
-interface SelectionData {
-  photo_id: string
-  selected_for_package: boolean
-  is_additional_purchase: boolean
 }
 
 export async function POST(request: NextRequest) {
   try {
     console.log('=== P24 Init API Start ===')
     
-    // Environment variables check
-    const requiredVars = ['P24_MERCHANT_ID', 'P24_POS_ID', 'P24_CRC_KEY']
-    for (const varName of requiredVars) {
-      if (!process.env[varName]) {
-        console.error(`Missing environment variable: ${varName}`)
-        return NextResponse.json(
-          { error: `Missing ${varName}` },
-          { status: 500 }
-        )
-      }
-    }
-    
-    const body: PaymentRequest = await request.json()
+    const body = await request.json()
     const { gallery_id } = body
     
     if (!gallery_id) {
@@ -104,9 +33,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    console.log('Loading gallery:', gallery_id)
-    
-    // Load gallery data
+    // Load gallery data with proper client relationship
     const { data: gallery, error: galleryError } = await supabase
       .from('galleries')
       .select(`
@@ -114,7 +41,12 @@ export async function POST(request: NextRequest) {
         title,
         package_photos_count,
         additional_photo_price,
-        clients!inner(name, email)
+        client_id,
+        clients!inner(
+          id,
+          name,
+          email
+        )
       `)
       .eq('id', gallery_id)
       .single()
@@ -127,24 +59,24 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    const galleryData = gallery as unknown as GalleryData
-    console.log('Gallery loaded:', galleryData.title)
+    // Transform nested client data
+    const clientData = Array.isArray(gallery.clients) 
+      ? gallery.clients[0] 
+      : gallery.clients
     
-    if (!galleryData.clients) {
-      console.error('No client associated with gallery')
+    if (!clientData) {
       return NextResponse.json(
         { error: 'No client found for gallery' },
         { status: 400 }
       )
     }
     
-    console.log('Loading selections for gallery...')
-    
     // Load client selections
     const { data: selections, error: selectionsError } = await supabase
       .from('client_selections')
       .select('photo_id, selected_for_package, is_additional_purchase')
       .eq('gallery_id', gallery_id)
+      .eq('client_id', gallery.client_id)
     
     if (selectionsError) {
       console.error('Selections error:', selectionsError)
@@ -154,24 +86,9 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    const selectionsData = (selections || []) as SelectionData[]
-    console.log(`Found ${selectionsData.length} selections`)
-    
     // Calculate amount
-    const packageSelections = selectionsData.filter(s => s.selected_for_package).length
-    const additionalSelections = selectionsData.filter(s => s.is_additional_purchase).length
-    
-    // Package is free, only additional photos cost money
-    const packageAmount = 0 // Free package
-    const additionalAmount = additionalSelections * (galleryData.additional_photo_price * 100) // Convert to grosze
-    const totalAmount = packageAmount + additionalAmount
-    
-    console.log('Amount calculation:', {
-      packageSelections,
-      additionalSelections,
-      additionalPhotoPrice: galleryData.additional_photo_price,
-      totalAmount
-    })
+    const additionalSelections = (selections || []).filter(s => s.is_additional_purchase).length
+    const totalAmount = additionalSelections * (gallery.additional_photo_price * 100) // Convert to grosze
     
     if (totalAmount === 0) {
       return NextResponse.json(
@@ -183,8 +100,6 @@ export async function POST(request: NextRequest) {
     // Generate unique session ID
     const sessionId = `gallery_${gallery_id}_${Date.now()}`
     
-    console.log('Creating P24 transaction...')
-    
     // Prepare P24 transaction data
     const transactionData = {
       merchantId: P24_CONFIG.merchantId,
@@ -192,55 +107,84 @@ export async function POST(request: NextRequest) {
       sessionId: sessionId,
       amount: totalAmount,
       currency: 'PLN',
-      description: `Zdjęcia z galerii: ${galleryData.title}`,
-      email: galleryData.clients.email,
-      client: galleryData.clients.name,
+      description: `Zdjęcia z galerii: ${gallery.title}`,
+      email: clientData.email,
+      client: clientData.name,
       country: 'PL',
       language: 'pl',
-      urlReturn: `${process.env.NEXT_PUBLIC_APP_URL}/gallery/${gallery_id}?payment=success`,
-      urlStatus: `${process.env.NEXT_PUBLIC_APP_URL}/api/p24/callback`,
-      timeLimit: 30, // 30 minutes
-      channel: 16, // All 24/7 methods
+      urlReturn: `${process.env.NEXT_PUBLIC_APP_URL || 'https://foto-platform.vercel.app'}/gallery/${gallery_id}/success`,
+      urlStatus: `${process.env.NEXT_PUBLIC_APP_URL || 'https://foto-platform.vercel.app'}/api/p24/callback`,
+      timeLimit: 30,
+      channel: 16,
       waitForResult: false,
       regulationAccept: false
     }
     
-    const p24Response = await registerP24Transaction(transactionData)
-    
-    if (!p24Response.data?.token) {
-      console.error('P24 response error:', p24Response)
-      return NextResponse.json(
-        { error: 'Failed to create P24 transaction' },
-        { status: 500 }
-      )
+    // Calculate sign
+    const signData = {
+      sessionId: transactionData.sessionId,
+      merchantId: transactionData.merchantId,
+      amount: transactionData.amount,
+      currency: transactionData.currency,
+      crc: P24_CONFIG.crcKey
     }
     
-    console.log('P24 transaction created successfully')
+    const sign = calculateP24Sign(signData)
+    const payload = { ...transactionData, sign }
     
-    // Store transaction in database
+    // Create Basic Auth credentials
+    const credentials = Buffer.from(`${P24_CONFIG.posId}:${P24_CONFIG.apiKey}`).toString('base64')
+    
+    // Register transaction with P24
+    const p24Url = `${P24_CONFIG.baseUrl}/api/v1/transaction/register`
+    console.log('Calling P24 API:', p24Url)
+    
+    const response = await fetch(p24Url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${credentials}`
+      },
+      body: JSON.stringify(payload)
+    })
+    
+    const responseText = await response.text()
+    console.log('P24 response:', response.status, responseText)
+    
+    if (!response.ok) {
+      throw new Error(`P24 API error: ${response.status} - ${responseText}`)
+    }
+    
+    const p24Response = JSON.parse(responseText)
+    
+    if (!p24Response.data?.token) {
+      throw new Error('No token received from P24')
+    }
+    
+    // Store order in database
     const { error: orderError } = await supabase
       .from('orders')
       .insert({
         gallery_id: gallery_id,
-        client_id: galleryData.clients.email, // Using email as client reference
-        photographer_id: gallery_id, // This should be extracted from gallery
-        total_amount: totalAmount / 100, // Convert back to PLN
+        client_id: gallery.client_id,
+        photographer_id: gallery.photographer_id || gallery.client_id,
+        total_amount: totalAmount / 100,
         status: 'pending',
         p24_session_id: sessionId
       })
     
     if (orderError) {
       console.error('Order creation error:', orderError)
-      // Continue anyway, P24 transaction is created
     }
     
-    const paymentUrl = `https://secure.przelewy24.pl/trnRequest/${p24Response.data.token}`
+    const paymentUrl = `${P24_CONFIG.baseUrl}/trnRequest/${p24Response.data.token}`
     
     console.log('=== P24 Init API Success ===')
+    console.log('Payment URL:', paymentUrl)
     
     return NextResponse.json({
       success: true,
-      paymentUrl,
+      payment_url: paymentUrl, // Zmiana nazwy klucza
       sessionId,
       amount: totalAmount,
       token: p24Response.data.token
