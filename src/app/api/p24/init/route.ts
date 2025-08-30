@@ -46,24 +46,44 @@ export async function POST(request: NextRequest) {
     
     console.log('Loading gallery:', gallery_id)
     
-    // Load gallery data with photographer_id included
-    const { data: gallery, error: galleryError } = await supabase
-      .from('galleries')
-      .select(`
-        id,
-        title,
-        package_photos_count,
-        additional_photo_price,
-        client_id,
-        photographer_id,
-        clients(
-          id,
-          name,
-          email
-        )
-      `)
-      .eq('id', gallery_id)
-      .single()
+    // Użyj tego:
+const { data: gallery, error: galleryError } = await supabase
+  .from('galleries')
+  .select(`
+    id,
+    title,
+    package_photos_count,
+    additional_photo_price,
+    client_id,
+    photographer_id
+  `)
+  .eq('id', gallery_id)
+  .single()
+
+if (galleryError || !gallery) {
+  console.error('Gallery error:', galleryError)
+  return NextResponse.json(
+    { error: 'Gallery not found' },
+    { status: 404 }
+  )
+}
+
+// Pobierz klienta osobno
+const { data: clientData, error: clientError } = await supabase
+  .from('clients')
+  .select('id, name, email')
+  .eq('id', gallery.client_id)
+  .single()
+
+console.log('Client query result:', { clientData, clientError })
+
+if (!clientData) {
+  console.log('No client data found for client_id:', gallery.client_id)
+  return NextResponse.json(
+    { error: 'No client found for gallery' },
+    { status: 400 }
+  )
+}
     
     console.log('Gallery query result:', {
       success: !galleryError,
