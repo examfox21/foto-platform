@@ -172,19 +172,19 @@ export async function POST(request: NextRequest) {
     console.log('Generated session ID:', sessionId)
     
     // Prepare P24 transaction data
-    const transactionData = {
-      merchantId: P24_CONFIG.merchantId,
+const transactionData = {
+  merchantId: P24_CONFIG.merchantId,
   posId: P24_CONFIG.posId,
   sessionId: sessionId,
   amount: totalAmount,
   currency: 'PLN',
   description: `Zdjęcia z galerii: ${gallery.title}`,
   email: clientData.email,
-  client: clientData.name,  // ZMIEŃ NA: clientName
+  client: clientData.name,  // To pole może być opcjonalne
   country: 'PL',
   language: 'pl',
-  urlReturn: `${process.env.NEXT_PUBLIC_APP_URL || 'https://foto-platform.vercel.app'}/gallery/${gallery_id}/success`,
-  urlStatus: `${process.env.NEXT_PUBLIC_APP_URL || 'https://foto-platform.vercel.app'}/api/p24/callback`,
+  urlReturn: `https://foto-platform.vercel.app/gallery/${gallery_id}/success`,
+  urlStatus: `https://foto-platform.vercel.app/api/p24/callback`,
   timeLimit: 30,
   channel: 16,
   waitForResult: false,
@@ -221,9 +221,12 @@ export async function POST(request: NextRequest) {
     console.log('Sign calculated:', sign.substring(0, 10) + '...')
     
     // Create Basic Auth credentials
-    const credentials = Buffer.from('345336:29d4a3974b579addd2f18f29f7b83432').toString('base64')
+    const credentials = Buffer.from(`345336:29d4a3974b579addd2f18f29f7b83432`).toString('base64')
     console.log('Test credentials:', credentials)
     console.log('Auth credentials prepared')
+    console.log('Full auth header:', `Basic ${credentials}`)
+console.log('Full request URL:', p24Url)
+console.log('Full request body:', JSON.stringify(payload))
     
     // Register transaction with P24
     const p24Url = `${P24_CONFIG.baseUrl}/api/v1/transaction/register`
@@ -234,13 +237,14 @@ export async function POST(request: NextRequest) {
     })
     
     const response = await fetch(p24Url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${credentials}`
-      },
-      body: JSON.stringify(payload)
-    })
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Basic ${credentials}`,
+    'Accept': 'application/json'  // Dodaj Accept header
+  },
+  body: JSON.stringify(payload)
+})
     
     const responseText = await response.text()
     console.log('P24 response status:', response.status)
