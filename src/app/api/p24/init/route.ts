@@ -74,29 +74,39 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Pobierz klienta osobno
-    console.log('Loading client for client_id:', gallery.client_id)
+    // Pobierz klienta osobno z maybeSingle
+    console.log('Looking for client with ID:', gallery.client_id)
     
     const { data: clientData, error: clientError } = await supabase
       .from('clients')
-      .select('id, name, email')
+      .select('*')
       .eq('id', gallery.client_id)
-      .single()
+      .maybeSingle()
     
-    console.log('Client query result:', { 
-      success: !clientError,
-      error: clientError?.message,
-      clientData 
-    })
+    console.log('Client query raw result:', clientData)
+    console.log('Client query error:', clientError)
     
-    if (clientError || !clientData) {
-      console.log('No client data found for client_id:', gallery.client_id)
-      console.error('Client error:', clientError)
+    if (!clientData) {
+      // Debug - sprawdź czy są jakiekolwiek klienci
+      const { data: allClients } = await supabase
+        .from('clients')
+        .select('id, name')
+        .limit(5)
+      
+      console.log('Sample clients in database:', allClients)
+      console.log('No client found for ID:', gallery.client_id)
+      
       return NextResponse.json(
         { error: 'No client found for gallery' },
         { status: 400 }
       )
     }
+    
+    console.log('Client found:', {
+      id: clientData.id,
+      name: clientData.name,
+      email: clientData.email
+    })
     
     console.log('Loading selections for gallery_id:', gallery_id, 'and client_id:', gallery.client_id)
     
@@ -129,7 +139,9 @@ export async function POST(request: NextRequest) {
     console.log('Selection breakdown:', {
       total: selections?.length || 0,
       package: packageSelections.length,
-      additional: additionalSelections.length
+      additional: additionalSelections.length,
+      packageSelections: packageSelections,
+      additionalSelections: additionalSelections
     })
     
     const pricePerPhoto = Number(gallery.additional_photo_price) || 0
@@ -146,8 +158,9 @@ export async function POST(request: NextRequest) {
     
     if (totalAmount === 0) {
       console.log('No chargeable items - total amount is 0')
+      console.log('Debug: All selections are in package, no additional purchases')
       return NextResponse.json(
-        { error: 'No chargeable items selected' },
+        { error: 'No chargeable items selected. All photos are included in the package.' },
         { status: 400 }
       )
     }
@@ -180,7 +193,8 @@ export async function POST(request: NextRequest) {
       sessionId: transactionData.sessionId,
       amount: transactionData.amount,
       email: transactionData.email,
-      client: transactionData.client
+      client: transactionData.client,
+      description: transactionData.description
     })
     
     // Calculate sign
@@ -192,9 +206,11 @@ export async function POST(request: NextRequest) {
       crc: P24_CONFIG.crcKey
     }
     
-    console.log('Sign data:', {
-      ...signData,
-      crc: 'HIDDEN'
+    console.log('Sign data (without CRC):', {
+      sessionId: signData.sessionId,
+      merchantId: signData.merchantId,
+      amount: signData.amount,
+      currency: signData.currency
     })
     
     const sign = calculateP24Sign(signData)
@@ -209,6 +225,10 @@ export async function POST(request: NextRequest) {
     // Register transaction with P24
     const p24Url = `${P24_CONFIG.baseUrl}/api/v1/transaction/register`
     console.log('Calling P24 API:', p24Url)
+    console.log('P24 Request payload (without sign):', {
+      ...transactionData,
+      sign: 'HIDDEN'
+    })
     
     const response = await fetch(p24Url, {
       method: 'POST',
@@ -224,14 +244,21 @@ export async function POST(request: NextRequest) {
     console.log('P24 response body:', responseText)
     
     if (!response.ok) {
-      console.error('P24 API error')
+      console.error('P24 API error - status:', response.status)
+      console.error('P24 API error - body:', responseText)
       throw new Error(`P24 API error: ${response.status} - ${responseText}`)
     }
     
-    const p24Response = JSON.parse(responseText)
+    let p24Response
+    try {
+      p24Response = JSON.parse(responseText)
+    } catch (e) {
+      console.error('Failed to parse P24 response:', e)
+      throw new Error('Invalid response from P24')
+    }
     
     if (!p24Response.data?.token) {
-      console.error('No token in P24 response')
+      console.error('No token in P24 response:', p24Response)
       throw new Error('No token received from P24')
     }
     
@@ -247,19 +274,19 @@ export async function POST(request: NextRequest) {
       p24_session_id: sessionId
     }
     
-    console.log('Creating order:', orderData)
+    console.log('Creating order in database:', orderData)
     
     const { data: orderResult, error: orderError } = await supabase
       .from('orders')
       .insert(orderData)
       .select()
-      .single()
+      .maybeSingle()
     
     if (orderError) {
       console.error('Order creation error:', orderError)
       // Continue anyway - P24 transaction is created
     } else {
-      console.log('Order created:', orderResult?.id)
+      console.log('Order created successfully:', orderResult?.id)
     }
     
     const paymentUrl = `${P24_CONFIG.baseUrl}/trnRequest/${p24Response.data.token}`
@@ -277,9 +304,12 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('=== P24 Init API Error ===')
-    console.error('Error details:', error)
+    console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error)
+    console.error('Error message:', error instanceof Error ? error.message : String(error))
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { error: error instanceof Error ? error.message : 'Unknown error occurred' },
       { status: 500 }
     )
   }
